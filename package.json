@@ -1,0 +1,26 @@
+{
+  "name": "dtracking-service",
+  "version": "0.0.1",
+  "description": "Service for Dtracking mobile app",
+  "main": "app.js",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "express": "^4.17.1",
+    "jest": "^27.0.4",
+    "jsonwebtoken": "^8.5.1",
+    "moment": "^2.29.1",
+    "nodemon": "^2.0.7",
+    "pg": "^8.6.0",
+    "socket.io": "^2.4.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "jest",
+    "start": "node ./src/app.js",
+    "dev": "nodemon ./src/app.js"
+  },
+  "author": "Adithach",
+  "license": "ISC"
+}
