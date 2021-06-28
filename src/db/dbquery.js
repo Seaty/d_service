@@ -77,7 +77,7 @@ const get_login = async (user_id, password) => {
             return { code: 401, message: 'not_assign_municipality' }
         }
         userData = userData.data
-        let user_data = { user_id: user_id, role: userData.role, user_name: userData.user_name, user_surname: userData.user_surname, municipality: municipalityData.data ,email: userData.email }
+        let user_data = { user_id: user_id, role: userData.role, user_name: userData.user_name, user_surname: userData.user_surname, municipality: municipalityData.data, email: userData.email }
         let token = jwt.sign(user_data, JWTSECRET, { expiresIn: JWTEXPIRE });
         return { code: false, token: token, municipality: municipalityData.data }
     } catch (error) {
@@ -279,12 +279,11 @@ const update_user_data = async (user_id, data) => {
     }
 }
 
-const isTest = "_test"; //Test
 
 
 const update_mts_c = async (user_id, dvid, municipality_id) => {
     try {
-        let dbname = `${municipality_id}_mts${isTest}`
+        let dbname = `${municipality_id}_mts`
         let get_sql = `SELECT dvid,tyid,use,user_id FROM mts_m WHERE dvid = '${dvid}' AND tyid = '002'`
         let r1 = await pgcon.get(dbname, get_sql, DBCONNECTION)
         if (r1.code) {
@@ -307,7 +306,7 @@ const update_mts_c = async (user_id, dvid, municipality_id) => {
 
 const update_realtime_data = async (mobile_id, lat, lon, m_batt, m_storage, m_speed, m_signal, m_upload, m_download, municipality_id) => {
     try {
-        let dbname = `${municipality_id}_mts${isTest}`
+        let dbname = `${municipality_id}_mts`
         let deeMapUrl = `https://deemap.com/api/geofencing/lat=${lat}/lon=${lon}/radius=200/key=ov.gsjytaVI4MvEu1bYoHuKlaNZcokssctEhOAvD7StDth62IdPei`
         let result = await axios.get(deeMapUrl)
         console.log(result.data);
@@ -340,6 +339,89 @@ const update_realtime_data = async (mobile_id, lat, lon, m_batt, m_storage, m_sp
 }
 
 
+const getLastNoti = async (email, municipality_id, flag) => {
+    try {
+        let get_sql = `SELECT id,msg,lv,creat_time FROM mts_dn WHERE user_id = '${email}' AND flag = '${flag}'`
+        let result = await pgcon.get(`${municipality_id}_mts`, get_sql, DBCONNECTION)
+        if (result.code) {
+            throw result
+        }
+        return { code: false, data: result.data }
+    } catch (error) {
+        throw { code: 500, message: error['message'] || error }
+    }
+}
+
+
+const saveNotification = async (msg, user_id, lv, municipality_id) => {
+    try {
+        let insert_sql = `INSERT INTO mts_dn(id,msg,user_id,lv,create_time,flag) VALUES ('${uuid()}','${msg}','${user_id}','${lv}',NOW(),'1') RETURNING id,msg,user_id,lv`
+        let result = await pgcon.getOne(`${municipality_id}_mts`, insert_sql, DBCONNECTION)
+        if (result.code) {
+            return { error: result.message }
+        }
+        return result.data
+    } catch (error) {
+        return { error: error }
+    }
+}
+
+
+const get_user_client = async (user_id) => {
+    try {
+        let get_sql = `SELECT client_id, municipality_id, mobile_id FROM dtracking_online WHERE user_id = '${user_id}'`
+        let result = await pgcon.getOne(MASTER_DB, get_sql, DBCONNECTION)
+        if (result.code) {
+            return { error: result.message }
+        }
+        return result.data
+    } catch (error) {
+        return { error: error }
+    }
+}
+
+const go_online = async (user_id, client_id, municipality_id, mobile_id) => {
+    try {
+        let update_sql = `INSERT INTO dtracking_online(client_id,municipality_id,user_id,mobile_id,last_update) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (user_id) DO UPDATE SET client_id = $1, municipality_id = $2,mobile_id=$4, last_update = NOW()`
+        let update_data = [client_id, municipality_id, user_id, mobile_id]
+        let result = await pgcon.excutewithparams(update_sql, update_data, MASTER_DB, DBCONNECTION)
+        if (result.code) {
+            return { error: result.message }
+        }
+        return { error: false }
+    } catch (error) {
+        return { error: error }
+    }
+}
+
+const go_offline = async (client_id) => {
+    try {
+        let delete_sql = `DELETE FROM dtracking_online WHERE client_id = $1`
+        let result = await pgcon.excutewithparams(delete_sql, [client_id], MASTER_DB, DBCONNECTION)
+        if (result.code) {
+            return { error: result.message }
+        }
+        return { error: false }
+    } catch (error) {
+        return { error: error }
+    }
+}
+
+const save_chat_message = async (from_user, to_user, msg, lv) => {
+    try {
+        let insert_sql = `INSERT INTO mts_msg(id,from_user,to_user,msg,create_time,lv,flag) VALUES ($1,$2,$3,$4,NOW(),$5,'1')`
+        let result = await pgcon.excutewithparams(insert_sql, [uuid(), from_user, to_user, msg, lv], MASTER_DB, DBCONNECTION)
+        if (result.code) {
+            return { error: result.message }
+        }
+        return { error: false }
+    } catch (error) {
+        return { error: error }
+    }
+}
+
+
+
 module.exports = {
     get_login,
     register_new_user,
@@ -357,5 +439,10 @@ module.exports = {
     socketTokenCheck,
     update_mts_c,
     update_realtime_data,
-    tokencheck
+    tokencheck,
+    getLastNoti,
+    get_user_client,
+    saveNotification,
+    go_online,
+    go_offline
 }

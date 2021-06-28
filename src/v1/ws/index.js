@@ -1,10 +1,12 @@
-const { socketTokenCheck, update_mts_c, update_realtime_data } = require('../../db/dbquery')
+const { socketTokenCheck, update_mts_c, update_realtime_data, get_user_client, saveNotification, go_online, go_offline } = require('../../db/dbquery')
+const moment = require('moment')
 const { uuid } = require("../utils")
 
 
 module.exports = function (io) {
 
-    var online_device = {}
+    let userdata = {}
+
     var online_admin = {
         dtc0001: {
             client_id: "testid1",
@@ -20,7 +22,6 @@ module.exports = function (io) {
         }
     }
 
-    var room = []
 
     io.on('connection', (client) => {
         console.log(`Connection has create : ${client.id}`);
@@ -31,7 +32,7 @@ module.exports = function (io) {
             console.log(client.id);
             //{ "token":"", "mobile_id":"", "lat":"", "lon":"", "m_batt":"", "m_storage":"", "m_speed":"", "m_signal":"", "m_upload":"", "m_download":"","municipality_id":""}
             let { token, mobile_id, lat, lon, m_batt, m_storage, m_speed, m_signal, m_upload, m_download, municipality_id } = data
-            online_device[mobile_id] = { client_id: client.id, municipality_id: municipality_id }
+            // online_device[mobile_id] = { client_id: client.id, municipality_id: municipality_id }
             let { user_id } = await socketTokenCheck(token)
             let err = await update_mts_c(user_id, mobile_id, municipality_id)
             if (err) {
@@ -42,40 +43,64 @@ module.exports = function (io) {
             if (err2) {
                 console.error(err2);
             }
-
         })
 
 
+        client.on('reconnect', async () => {
+            console.log(userdata['user_id']);
+        })
 
-        client.on('disconnect',async (text) => {
-            let keys = Object.keys(online_device)
-            for (let key of keys) {
-                if (online_device[key].client_id = client.id) {
-                    delete online_device[key]
-                }
-            }
+        client.on('disconnect', async (text) => {
             console.log(`${client.id} : disconnected`);
-            console.log(online_device);
+            let err = await go_offline(client.id)
+            if (err) {
+                console.error(err);
+            }
         })
 
 
 
         //Chat zone
         client.on('start_chat', async (data) => {
-            console.log(data);
-            let user_start_msg = {msg:`สวัสดีครับ, ผมเจ้าหน้ารหัสประจำตัว 000001 ยินดีให้บริการ, ไม่ทราบว่าต้องการให้ช่วยเหลืออะไรครับ`,}
-            let {municipality_id,mobile_id} = data
-            online_device[mobile_id] = { client_id: client.id, municipality_id: municipality_id }
-            console.log(online_device);
-            io.to(client.id).emit("start_message",user_start_msg)
-        })
-
-
-        client.on('user_message', async (data) => {
             // {msg:"",mobile_id:"",}
+            console.log(data);
+            let user_start_msg = { msg: `สวัสดีครับ, ผมเจ้าหน้ารหัสประจำตัว 000001 ยินดีให้บริการ, ไม่ทราบว่าต้องการให้ช่วยเหลืออะไรครับ`, }
+            let { municipality_id, user_id, mobile_id } = data
+            userdata = data
+            let err = await go_online(user_id, client.id, municipality_id, mobile_id)
+            if (err) {
+                console.error(err);
+            }
+            io.to(client.id).emit("start_message", user_start_msg)
+        })
 
+        
+
+
+
+
+
+
+        //Notification Zone
+
+        client.on('admin_send_noti', async (data) => {
+            try {
+                let { user_id, msg, lv } = data
+                let { client_id, municipality_id } = await get_user_client(user_id)
+                let save_result = await saveNotification(msg, user_id, lv, municipality_id)
+                if (save_result.error) {
+                    console.error(save_result.error);
+                }
+                let { id } = save_result
+                let noti_data = { id, msg, lv }
+                io.to(client_id).emit("user_notification", noti_data)
+            } catch (error) {
+                console.error(error);
+            }
 
         })
+
+
 
 
 

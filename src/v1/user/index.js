@@ -56,9 +56,9 @@ userRouter.get('/check_phone', async (req, res) => {
 
 
 //Update user data at municipality
-userRouter.patch('/:email', async (req, res) => {
+userRouter.patch('/', async (req, res) => {
     try {
-        let { email } = req.params
+        let { email } = req.auth
         let checkuser = await check_user_data(email)
         if (checkuser.code) {
             return res.status(result.code).send(result.message)
